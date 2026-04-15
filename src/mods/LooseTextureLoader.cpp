@@ -389,9 +389,9 @@ void LooseTextureLoader::find_get_path_to_resource_func() {
             }
 
             if (found_first_mov_mem_disp && !first_mov_mem_disp_is_valid) {
-                return utility::ExhaustionResult::BREAK;
+                found_first_mov_mem_disp = false;
+                return utility::ExhaustionResult::CONTINUE;
             }
-
             if (first_mov_mem_disp_is_valid && cmp_12_count >= 1) {
                 return utility::ExhaustionResult::BREAK;
             }

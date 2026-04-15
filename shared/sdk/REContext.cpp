@@ -77,6 +77,12 @@ namespace sdk {
 
     void VM::update_pointers() {
         {
+#ifdef PRAGMATA
+            if (s_global_context == nullptr) {
+                s_global_context = (REContext**)0x14BB21D40;
+                spdlog::info("[VM]: Hardcoded Pragmata GlobalContext set to 0x14BB21D40");
+            }
+#endif
             // Originally this was always locking the lock in read mode
             // however that was WAY too much which was reducing performance
             // so just checking this bool is enough.
