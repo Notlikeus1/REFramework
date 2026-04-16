@@ -319,15 +319,19 @@ bool FaultyFileDetector::scan_resource_process_parse_and_hook() {
                 const int scan_resource_path_usage_length = 1024;
                 auto using_resource_path_offset = utility::scan_displacement_reference(possible_get_next_resource_to_process_call.value(), scan_resource_path_usage_length, str_offset.value());
 
-                std::uint8_t *resource_stream_failed_offset = nullptr;
-
-                if (using_resource_path_offset.has_value()) {
-                    // Skip the displacement value
-                    auto next_instr = using_resource_path_offset.value() + 4;
-
-                    const int scan_resource_stream_failed_length = 2048;
-                    utility::exhaustive_decode((uint8_t*)next_instr, scan_resource_stream_failed_length, std::bind(&FaultyFileDetector::scan_for_resource_open_failed_hook, this, std::placeholders::_1));
+                if (!using_resource_path_offset.has_value()) {
+                    spdlog::warn(
+                        "[FaultyFileDetector]: Failed to find resource path usage in candidate get next resource function at 0x{:X}",
+                        possible_get_next_resource_to_process_call.value()
+                    );
+                    continue;
                 }
+
+                // Skip the displacement value.
+                auto next_instr = using_resource_path_offset.value() + 4;
+
+                const int scan_resource_stream_failed_length = 2048;
+                utility::exhaustive_decode((uint8_t*)next_instr, scan_resource_stream_failed_length, std::bind(&FaultyFileDetector::scan_for_resource_open_failed_hook, this, std::placeholders::_1));
 
                 if (m_resource_open_failed_addr) {
                     spdlog::info("[FaultyFileDetector]: Found resource stream failed check at 0x{:X}, hooking to detect failed resource stream", (uintptr_t)m_resource_open_failed_addr);

@@ -64,6 +64,12 @@ void LooseTextureLoader::on_draw_ui() {
 #else
 
     if (ImGui::TreeNode("Loose Texture")) {
+#if defined(PRAGMATA)
+        ImGui::TextWrapped("Loose texture loading is currently disabled for Pragmata to avoid startup crashes.");
+        ImGui::TreePop();
+        return;
+#endif
+
         if (m_enabled->draw("Enable")) {
             g_framework->request_save_config();
         }
@@ -118,6 +124,16 @@ void LooseTextureLoader::on_draw_ui() {
 
 void LooseTextureLoader::early_initialize() {
 #if ENABLE_LOOSE_TEXTURE_LOADER
+#if defined(PRAGMATA)
+    spdlog::info("[LooseTextureLoader]: Disabled on Pragmata to avoid startup crashes while signatures are unstable");
+    return;
+#endif
+
+    if (!m_enabled->value()) {
+        spdlog::info("[LooseTextureLoader]: Disabled by config, skipping early initialization");
+        return;
+    }
+
     hook_dstorage_path_checks();
     hook_dstorage_enqueue_chain();
     hook_resource_path_hashing();

@@ -21,6 +21,12 @@
     #define ENABLE_LOOSE_TEXTURE_LOADER 0
 #endif
 
+#if defined(PRAGMATA)
+    #define DEFAULT_LOOSE_TEXTURE_LOADER_ENABLED 0
+#else
+    #define DEFAULT_LOOSE_TEXTURE_LOADER_ENABLED 1
+#endif
+
 namespace sdk { class ResourceManager; }
 
 typedef bool (*GetNativeResourcePath)(sdk::ResourceManager *resource_manager, wchar_t *dest_path_buffer, const wchar_t *local_resource_path, void *resource_type, bool localize);
@@ -111,7 +117,7 @@ private:
     std::mutex m_resource_path_counters_mutex{};
 
     // Config
-    ModToggle::Ptr m_enabled{ ModToggle::create(generate_name("Enabled"), true) };
+    ModToggle::Ptr m_enabled{ ModToggle::create(generate_name("Enabled"), DEFAULT_LOOSE_TEXTURE_LOADER_ENABLED) };
     ModToggle::Ptr m_disable_texture_cache{ ModToggle::create(generate_name("DisableTextureCache"), false) };
 
     std::vector<std::reference_wrapper<IModValue>> m_options{

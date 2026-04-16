@@ -1,0 +1,77 @@
+name: Dev Release PRAGMATA
+
+on: [push, workflow_dispatch]
+
+env:
+  BUILD_TYPE: Release
+  TARGET: PRAGMATA
+
+jobs:
+  dev-release-pragmata:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure CMake
+        run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DDEVELOPER_MODE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target ${{env.TARGET}}
+
+      - name: Compress release
+        run: |
+          echo ${{github.sha}} > ${{github.workspace}}/reframework_revision.txt
+          echo none > ${{github.workspace}}/DELETE_OPENVR_API_DLL_IF_YOU_WANT_TO_USE_OPENXR
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/reframework_revision.txt
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/DELETE_OPENVR_API_DLL_IF_YOU_WANT_TO_USE_OPENXR
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/build/bin/${{env.TARGET}}/dinput8.dll
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/dependencies/openvr/bin/win64/openvr_api.dll
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/build/_deps/openxr-build/src/loader/${{env.BUILD_TYPE}}/openxr_loader.dll
+          7z a ${{github.workspace}}/${{env.TARGET}}.zip ${{github.workspace}}/scripts
+          7z rn ${{github.workspace}}/${{env.TARGET}}.zip scripts reframework/autorun
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
+        with:
+          name: ${{env.TARGET}}-standalone
+          path: ${{github.workspace}}/${{env.TARGET}}.zip
+          if-no-files-found: error
+
+  nightly-push-pragmata:
+    runs-on: windows-latest
+    needs: [dev-release-pragmata]
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download artifacts
+        uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427
+        with:
+          path: ${{github.workspace}}/artifacts
+
+      - name: Set padded run number
+        run: |
+          $paddedRunNumber = "{0:D5}" -f ${{ github.run_number }}
+          echo "RUN_NUMBER=$paddedRunNumber" >> $env:GITHUB_ENV
+        shell: powershell
+
+      - name: Create Release
+        uses: ncipollo/release-action@6c75be85e571768fa31b40abf38de58ba0397db5
+        with:
+          repo: REFramework-nightly
+          owner: praydog
+          token: ${{ secrets.REPO_TOKEN }}
+          name: ${{format('REF Nightly PRAGMATA {0} ({1})', env.RUN_NUMBER, github.sha)}}
+          tag: ${{format('nightly-pragmata-{0}-{1}', env.RUN_NUMBER, github.sha)}}
+          artifacts: ${{github.workspace}}/artifacts/**/*.zip
+          makeLatest: true
+          bodyFile: ${{github.workspace}}/nightly-body.md
+          allowUpdates: true
