@@ -3,7 +3,7 @@
 #ifdef DMC5
 #define TDB_VER 67
 #elif defined(PRAGMATA)
-#define TDB_VER 84
+#define TDB_VER 83
 #elif defined(RE9)
 #define TDB_VER 83
 #elif defined(STARFORCE)
