@@ -31,6 +31,10 @@ Mods::Mods() {
 #endif
 
 #ifndef BAREBONES
+#if defined(PRAGMATA)
+    m_mods.emplace_back(MethodDatabase::get());
+    m_mods.emplace_back(LooseFileLoader::get());
+#else
     m_mods.emplace_back(MethodDatabase::get());
     m_mods.emplace_back(Hooks::get());
     m_mods.emplace_back(LooseFileLoader::get());
@@ -66,6 +70,7 @@ Mods::Mods() {
 #endif
 
 #endif
+#endif
 
 #ifdef DEVELOPER
     auto dev_tools = std::make_shared<DeveloperTools>();
@@ -76,9 +81,11 @@ Mods::Mods() {
     }
 #endif
 
+#if !defined(PRAGMATA)
     m_mods.emplace_back(APIProxy::get());
     m_mods.emplace_back(PluginLoader::get());
     m_mods.emplace_back(ScriptRunner::get());
+#endif
 }
 
 std::optional<std::string> Mods::on_initialize() const {
