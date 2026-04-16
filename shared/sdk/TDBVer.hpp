@@ -65,7 +65,7 @@ struct RETypeDefinition;
 #if defined(PRAGMATA)
 #define TYPE_INDEX_BITS 19
 #define FIELD_BITS 20
-using RETypeDefinition_ = sdk::RETypeDefVersion84;
+using RETypeDefinition_ = sdk::RETypeDefVersion83;
 #elif defined(RE9)
 #define TYPE_INDEX_BITS 19
 #define FIELD_BITS 20
