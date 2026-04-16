@@ -773,7 +773,16 @@ HRESULT WINAPI D3D12Hook::resize_buffers(IDXGISwapChain3* swap_chain, UINT buffe
         }
     }
 
-    if (d3d12->m_on_resize_buffers) {
+    const bool ignore_startup_resize_callback =
+#if defined(PRAGMATA)
+        g_framework != nullptr && !g_framework->is_game_data_initialized();
+#else
+        false;
+#endif
+
+    if (ignore_startup_resize_callback) {
+        spdlog::warn("[Pragmata] Ignoring resize_buffers reset callback during startup");
+    } else if (d3d12->m_on_resize_buffers) {
         d3d12->m_on_resize_buffers(*d3d12);
     }
 
@@ -862,7 +871,16 @@ HRESULT WINAPI D3D12Hook::resize_target(IDXGISwapChain3* swap_chain, const DXGI_
         }
     }
 
-    if (d3d12->m_on_resize_target) {
+    const bool ignore_startup_resize_callback =
+#if defined(PRAGMATA)
+        g_framework != nullptr && !g_framework->is_game_data_initialized();
+#else
+        false;
+#endif
+
+    if (ignore_startup_resize_callback) {
+        spdlog::warn("[Pragmata] Ignoring resize_target reset callback during startup");
+    } else if (d3d12->m_on_resize_target) {
         d3d12->m_on_resize_target(*d3d12);
     }
 
