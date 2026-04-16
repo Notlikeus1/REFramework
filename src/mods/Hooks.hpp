@@ -138,7 +138,9 @@ private:
     #define HOOK_LAMBDA(func) [&]() -> std::optional<std::string> { return this->func(); }
 
     std::vector<std::function<std::optional<std::string>()>> m_hook_list{
+#if !defined(PRAGMATA)
         HOOK_LAMBDA(hook_all_application_entries),
+#endif
         HOOK_LAMBDA(hook_render_layers),
         HOOK_LAMBDA(hook_update_transform),
         HOOK_LAMBDA(hook_update_camera_controller),
