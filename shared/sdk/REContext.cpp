@@ -77,10 +77,10 @@ namespace sdk {
 
     void VM::update_pointers() {
         {
-#ifdef PRAGMATA
+#if defined(PRAGMATA)
             if (s_global_context == nullptr) {
-                s_global_context = (REContext**)0x14BB21D40;
-                spdlog::info("[VM]: Hardcoded Pragmata GlobalContext set to 0x14BB21D40");
+                s_global_context = (sdk::VM**)0x14BB21D40;
+                // spdlog::info cannot be used here if it's not initialized yet
             }
 #endif
             // Originally this was always locking the lock in read mode
