@@ -288,6 +288,7 @@ private:
     bool m_logged_waiting_for_game_data{false};
     bool m_logged_first_frame_blocked_by_error{false};
     bool m_logged_waiting_for_first_present_after_init{false};
+    bool m_pending_startup_reset{false};
 
     bool m_sent_message{false};
     bool m_message_hook_requested{false};

@@ -1016,6 +1016,26 @@ void REFramework::on_frame_d3d12() {
         return;
     }
 
+#if defined(PRAGMATA)
+    if (m_pending_startup_reset && m_game_data_initialized) {
+        spdlog::info("[Pragmata] Reinitializing D3D12 resources after deferred startup reset");
+
+        if (!init_d3d12()) {
+            spdlog::error("[Pragmata] Failed to reinitialize D3D12 after deferred startup reset");
+            return;
+        }
+
+        m_pending_startup_reset = false;
+        device = m_d3d12_hook->get_device();
+
+        if (device == nullptr) {
+            spdlog::error("[Pragmata] D3D12 device became null after deferred startup reset reinit");
+            m_initialized = false;
+            return;
+        }
+    }
+#endif
+
     bool is_init_ok = m_error.empty() && m_game_data_initialized;
 
     if (is_init_ok) {
@@ -1185,6 +1205,16 @@ void REFramework::on_reset() {
         //imgui::reset_keystates();
     }
 
+#if defined(PRAGMATA)
+    if (!m_game_data_initialized) {
+        spdlog::info("[Pragmata] Deferring startup reset until game data initialization completes");
+        m_pending_startup_reset = true;
+        m_has_frame = false;
+        m_logged_waiting_for_first_present_after_init = false;
+        return;
+    }
+#endif
+
     // Crashes if we don't release it at this point.
     if (m_is_d3d11) {
         deinit_d3d11();
@@ -1202,6 +1232,7 @@ void REFramework::on_reset() {
     m_first_initialize = false;
     m_initialized = false;
     m_logged_waiting_for_first_present_after_init = false;
+    m_pending_startup_reset = false;
 }
 
 void REFramework::patch_set_cursor_pos() {
