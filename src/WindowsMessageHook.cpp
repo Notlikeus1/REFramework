@@ -40,7 +40,11 @@ WindowsMessageHook::WindowsMessageHook(HWND wnd)
     std::lock_guard _{ g_proc_mutex };
     spdlog::info("Initializing WindowsMessageHook");
 
+#if !defined(PRAGMATA)
     utility::ThreadSuspender suspender{};
+#else
+    spdlog::info("WindowsMessageHook: Skipping ThreadSuspender on Pragmata");
+#endif
 
     g_windows_message_hook = this;
 
@@ -57,7 +61,11 @@ WindowsMessageHook::~WindowsMessageHook() {
     std::lock_guard _{ g_proc_mutex };
     spdlog::info("Destroying WindowsMessageHook");
 
+#if !defined(PRAGMATA)
     utility::ThreadSuspender suspender{};
+#else
+    spdlog::info("WindowsMessageHook: Skipping ThreadSuspender teardown on Pragmata");
+#endif
 
     remove();
     g_windows_message_hook = nullptr;
