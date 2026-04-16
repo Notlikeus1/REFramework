@@ -2,6 +2,7 @@
 #include <future>
 #include <unordered_set>
 #include <stacktrace>
+#include <atomic>
 #include <wrl/client.h>
 
 #include <spdlog/spdlog.h>
@@ -20,6 +21,7 @@
 
 static D3D12Hook* g_d3d12_hook = nullptr;
 thread_local bool g_inside_d3d12_hook = false;
+static std::atomic<uint32_t> g_pragmata_present_debug_count{0};
 
 D3D12Hook::~D3D12Hook() {
     unhook();
@@ -572,9 +574,14 @@ HRESULT WINAPI D3D12Hook::present(IDXGISwapChain3* swap_chain, uint64_t sync_int
         std::this_thread::yield();
     }
 
-    std::scoped_lock _{g_framework->get_hook_monitor_mutex()};
+    std::unique_lock hook_lock{g_framework->get_hook_monitor_mutex()};
 
     auto d3d12 = g_d3d12_hook;
+
+    g_inside_d3d12_hook = true;
+    utility::ScopeGuard inside_hook_guard{[]() {
+        g_inside_d3d12_hook = false;
+    }};
 
     decltype(D3D12Hook::present)* present_fn{nullptr};
 
@@ -619,6 +626,11 @@ HRESULT WINAPI D3D12Hook::present(IDXGISwapChain3* swap_chain, uint64_t sync_int
     }
 
     d3d12->m_inside_present = true;
+    utility::ScopeGuard inside_present_guard{[d3d12]() {
+        if (d3d12 != nullptr) {
+            d3d12->m_inside_present = false;
+        }
+    }};
     d3d12->m_swap_chain = swap_chain;
 
     {
@@ -657,6 +669,22 @@ HRESULT WINAPI D3D12Hook::present(IDXGISwapChain3* swap_chain, uint64_t sync_int
         if ((uintptr_t)present_fn != (uintptr_t)D3D12Hook::present && g_present_depth == 1) {
             spdlog::info("Attempting to call real present function");
 
+#if defined(PRAGMATA)
+            const auto debug_index = g_pragmata_present_debug_count.fetch_add(1, std::memory_order_relaxed);
+            const bool log_present_call = debug_index < 24;
+
+            if (log_present_call) {
+                spdlog::info("[Pragmata] Calling recursive real D3D12 present depth={} phase1={} swapchain={:x}",
+                    g_present_depth,
+                    d3d12->m_is_phase_1,
+                    (uintptr_t)swap_chain);
+            }
+
+            if (hook_lock.owns_lock()) {
+                hook_lock.unlock();
+            }
+#endif
+
             ++g_present_depth;
             const auto result = present_fn(swap_chain, sync_interval, flags, r9);
             --g_present_depth;
@@ -665,12 +693,36 @@ HRESULT WINAPI D3D12Hook::present(IDXGISwapChain3* swap_chain, uint64_t sync_int
                 spdlog::error("Present failed: {:x}", result);
             }
 
+#if defined(PRAGMATA)
+            if (log_present_call) {
+                spdlog::info("[Pragmata] Recursive real D3D12 present returned {:x}", result);
+            }
+#endif
+
             return result;
         }
 
         spdlog::info("Just returning S_OK");
         return S_OK;
     }
+
+#if defined(PRAGMATA)
+    const auto debug_index = g_pragmata_present_debug_count.fetch_add(1, std::memory_order_relaxed);
+    const bool log_present_call = debug_index < 24;
+
+    if (log_present_call) {
+        spdlog::info("[Pragmata] Entering D3D12 present depth={} phase1={} swapchain={:x} device={:x} command_queue={:x}",
+            g_present_depth,
+            d3d12->m_is_phase_1,
+            (uintptr_t)swap_chain,
+            (uintptr_t)d3d12->m_device,
+            (uintptr_t)d3d12->m_command_queue);
+    }
+
+    if (hook_lock.owns_lock()) {
+        hook_lock.unlock();
+    }
+#endif
 
     if (d3d12->m_on_present) {
         d3d12->m_on_present(*d3d12);
@@ -690,13 +742,17 @@ HRESULT WINAPI D3D12Hook::present(IDXGISwapChain3* swap_chain, uint64_t sync_int
         d3d12->m_ignore_next_present = false;
     }
 
+#if defined(PRAGMATA)
+    if (log_present_call) {
+        spdlog::info("[Pragmata] Real D3D12 present returned {:x}", result);
+    }
+#endif
+
     --g_present_depth;
 
     if (d3d12->m_on_post_present) {
         d3d12->m_on_post_present(*d3d12);
     }
-
-    d3d12->m_inside_present = false;
     
     return result;
 }
