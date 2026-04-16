@@ -26,13 +26,12 @@ Mods::Mods() {
     m_mods.emplace_back(BackBufferRenderer::get());
     m_mods.emplace_back(REFrameworkConfig::get());
 
-#if defined(REENGINE_AT)
+#if defined(REENGINE_AT) && !defined(PRAGMATA)
     m_mods.emplace_back(IntegrityCheckBypass::get_shared_instance());
 #endif
 
 #ifndef BAREBONES
 #if defined(PRAGMATA)
-    m_mods.emplace_back(MethodDatabase::get());
     m_mods.emplace_back(LooseFileLoader::get());
 #else
     m_mods.emplace_back(MethodDatabase::get());
