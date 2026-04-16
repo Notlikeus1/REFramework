@@ -506,8 +506,10 @@ REFramework::REFramework(HMODULE reframework_module)
 
     LooseTextureLoader::get().early_initialize();
 
-#if FAULTY_FILE_DETECTOR_ENABLED
+#if FAULTY_FILE_DETECTOR_ENABLED && !defined(PRAGMATA)
     FaultyFileDetector::early_init();
+#elif defined(PRAGMATA)
+    spdlog::info("[FaultyFileDetector]: Disabled on Pragmata during early initialization");
 #endif
 
 #if defined(REENGINE_AT)
