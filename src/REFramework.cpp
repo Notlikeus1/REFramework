@@ -580,6 +580,8 @@ REFramework::REFramework(HMODULE reframework_module)
     sdk::renderer::Renderer* renderer = nullptr;
     bool found_renderer = false;
     bool renderer_has_render_frame_fn = false;
+    sdk::REMethodDefinition* renderer_get_render_frame{nullptr};
+    bool logged_missing_renderer_has_instance = false;
 
     if (sdk::RETypeDB::get() != nullptr) {
         auto& loader = LooseFileLoader::get(); // Initialize this really early
@@ -638,13 +640,24 @@ REFramework::REFramework(HMODULE reframework_module)
             break;
         }
 
-        renderer_has_render_frame_fn = renderer_t->get_method("get_RenderFrame") != nullptr;
+        renderer_get_render_frame = renderer_t->get_method("get_RenderFrame");
+        renderer_has_render_frame_fn = renderer_get_render_frame != nullptr;
 
         const auto renderer_has_instance = renderer_t->get_method("hasInstance");
 
         if (renderer_has_instance == nullptr) {
-            spdlog::error("Renderer::hasInstance not found");
-            break;
+            if (!logged_missing_renderer_has_instance) {
+                spdlog::warn("Renderer::hasInstance not found, using RenderFrame fallback");
+                logged_missing_renderer_has_instance = true;
+            }
+
+            if (renderer_has_render_frame_fn) {
+                found_renderer = true;
+                break;
+            }
+
+            std::this_thread::yield();
+            continue;
         }
 
         if (renderer_has_instance->get_function() == nullptr) {
@@ -672,7 +685,11 @@ REFramework::REFramework(HMODULE reframework_module)
         continue;
     }
     
-    spdlog::info("Found renderer @ {:x} (type: {:x}), waiting for first frame...", (uintptr_t)renderer, (uintptr_t)renderer_t);
+    if (renderer != nullptr) {
+        spdlog::info("Found renderer @ {:x} (type: {:x}), waiting for first frame...", (uintptr_t)renderer, (uintptr_t)renderer_t);
+    } else {
+        spdlog::info("Renderer singleton is not available yet; waiting for first frame via RenderFrame fallback (type: {:x})", (uintptr_t)renderer_t);
+    }
 
     bool valid_render_frame = false;
 
@@ -684,15 +701,15 @@ REFramework::REFramework(HMODULE reframework_module)
 
     while (renderer_has_render_frame_fn) try {
         // This function is static so its fine if renderer is null.
-        const auto render_frame = renderer->get_render_frame();
-
-        if (!render_frame.has_value()) {
+        if (renderer_get_render_frame == nullptr) {
             spdlog::warn("Render frame property not found");
             break;
         }
 
-        if (*render_frame > 0) {
-            spdlog::info("Render frame: {}", *render_frame);
+        const auto render_frame = renderer_get_render_frame->call<uint32_t>(sdk::get_thread_context(), renderer);
+
+        if (render_frame > 0) {
+            spdlog::info("Render frame: {}", render_frame);
             valid_render_frame = true;
             break;
         }
