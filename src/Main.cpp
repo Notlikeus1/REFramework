@@ -132,9 +132,13 @@ BOOL APIENTRY DllMain(HANDLE handle, DWORD reason, LPVOID reserved) {
 
         AllocateBuffer((LPVOID)halfway_module); // minhook
 
+    #if defined(PRAGMATA)
+        OutputDebugStringA("[REFramework] [Pragmata] Skipping early IntegrityCheckBypass startup hooks\n");
+    #else
         IntegrityCheckBypass::setup_pristine_syscall();
         IntegrityCheckBypass::hook_add_vectored_exception_handler();
         IntegrityCheckBypass::hook_rtl_exit_user_process();
+    #endif
 
         CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)startup_thread, handle, 0, nullptr);
     }

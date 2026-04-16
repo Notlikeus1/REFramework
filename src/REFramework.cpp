@@ -292,7 +292,11 @@ REFramework::REFramework(HMODULE reframework_module)
     const auto pre_allocated_buffer = (uintptr_t)AllocateBuffer((LPVOID)halfway_module); // minhook function
     spdlog::info("Preallocated buffer: {:x}", pre_allocated_buffer);
 
+#if defined(PRAGMATA)
+    spdlog::info("[Pragmata] Skipping early IntegrityCheckBypass::fix_virtual_protect");
+#else
     IntegrityCheckBypass::fix_virtual_protect();
+#endif
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -512,7 +516,7 @@ REFramework::REFramework(HMODULE reframework_module)
     spdlog::info("[FaultyFileDetector]: Disabled on Pragmata during early initialization");
 #endif
 
-#if defined(REENGINE_AT)
+#if defined(REENGINE_AT) && !defined(PRAGMATA)
     utility::ThreadSuspender suspender{};
     IntegrityCheckBypass::ignore_application_entries();
 
@@ -540,10 +544,16 @@ REFramework::REFramework(HMODULE reframework_module)
     // Seen in SF6
     IntegrityCheckBypass::remove_stack_destroyer();
     suspender.resume();
+#elif defined(PRAGMATA)
+    spdlog::info("[Pragmata] Skipping early IntegrityCheckBypass patch chain");
 #endif
 
     // Load the plugins early right after executable unpacking
+#if defined(PRAGMATA)
+    spdlog::info("[Pragmata] Skipping PluginLoader early initialization");
+#else
     PluginLoader::get()->early_init();
+#endif
 
     // Wait for TDB and render device to be initialized before allowing D3D hooking
     const auto start_time = std::chrono::high_resolution_clock::now();
@@ -573,7 +583,6 @@ REFramework::REFramework(HMODULE reframework_module)
 
     if (sdk::RETypeDB::get() != nullptr) {
         auto& loader = LooseFileLoader::get(); // Initialize this really early
-        auto &integrity_bypass = IntegrityCheckBypass::get_shared_instance();
 
 #if FAULTY_FILE_DETECTOR_ENABLED
         auto& faulty_file_detector = FaultyFileDetector::get();
@@ -587,7 +596,10 @@ REFramework::REFramework(HMODULE reframework_module)
 #if FAULTY_FILE_DETECTOR_ENABLED
             faulty_file_detector->on_config_load(cfg);
 #endif
+#if !defined(PRAGMATA)
+            auto &integrity_bypass = IntegrityCheckBypass::get_shared_instance();
             integrity_bypass->on_config_load(cfg);
+#endif
         }
 
         if (loader->is_enabled()) {
@@ -911,9 +923,14 @@ void REFramework::on_frame_d3d11() {
             // hooks don't run until after initialization, so we just render the imgui window while initalizing.
             run_imgui_frame(true);
         } else {   
+            if (!m_logged_waiting_for_first_present_after_init) {
+                spdlog::info("[Startup] D3D11 init path is ready but no ImGui frame has been produced yet; waiting for the first stable present");
+                m_logged_waiting_for_first_present_after_init = true;
+            }
             return;
         }
     } else {
+        m_logged_waiting_for_first_present_after_init = false;
         invalidate_device_objects();
         ImGui_ImplDX11_NewFrame();
     }
@@ -1031,9 +1048,14 @@ void REFramework::on_frame_d3d12() {
             // hooks don't run until after initialization, so we just render the imgui window while initalizing.
             run_imgui_frame(true);
         } else {   
+            if (!m_logged_waiting_for_first_present_after_init) {
+                spdlog::info("[Startup] D3D12 init path is ready but no ImGui frame has been produced yet; waiting for the first stable present");
+                m_logged_waiting_for_first_present_after_init = true;
+            }
             return;
         }
     } else {
+        m_logged_waiting_for_first_present_after_init = false;
         do_per_frame_thing();
     }
 
@@ -1151,7 +1173,12 @@ void REFramework::on_post_present_d3d12() {
 void REFramework::on_reset() {
     std::scoped_lock _{ m_imgui_mtx };
 
-    spdlog::info("Reset!");
+    spdlog::info("Reset! renderer={} initialized={} game_data_initialized={} first_frame_d3d_initialize={} has_frame={}",
+        m_renderer_type == RendererType::D3D12 ? "D3D12" : "D3D11",
+        m_initialized,
+        m_game_data_initialized.load(),
+        m_first_frame_d3d_initialize,
+        m_has_frame);
 
     if (m_initialized) {
         // fixes text boxes not being able to receive input
@@ -1174,6 +1201,7 @@ void REFramework::on_reset() {
     m_has_frame = false;
     m_first_initialize = false;
     m_initialized = false;
+    m_logged_waiting_for_first_present_after_init = false;
 }
 
 void REFramework::patch_set_cursor_pos() {
@@ -2140,7 +2168,10 @@ bool REFramework::initialize_game_data() {
             utility::spoof_module_paths_in_exe_dir();
         }
 #endif
-        spdlog::info("Game data initialization thread finished");
+        spdlog::info("Game data initialization thread finished (error='{}', first_frame_d3d_initialize={}, initialized={})",
+            m_error,
+            m_first_frame_d3d_initialize,
+            m_initialized);
     });
 
     init_thread.detach();
@@ -2173,15 +2204,37 @@ bool REFramework::initialize_windows_message_hook() {
 // This one allows mods to run any initialization code in the context of the D3D thread (like VR code)
 // It also is the one that actually loads any config files
 bool REFramework::first_frame_initialize() {
-    const bool is_init_ok = m_error.empty() && m_game_data_initialized;
+    if (!m_game_data_initialized) {
+        if (!m_logged_waiting_for_game_data) {
+            spdlog::info("[Startup] Waiting for game data initialization before first frame D3D init");
+            m_logged_waiting_for_game_data = true;
+        }
+        return false;
+    }
 
-    if (!is_init_ok || !m_first_frame_d3d_initialize) {
-        return is_init_ok;
+    m_logged_waiting_for_game_data = false;
+
+    if (!m_error.empty()) {
+        if (!m_logged_first_frame_blocked_by_error) {
+            spdlog::error("[Startup] First frame D3D init blocked by startup error: {}", m_error);
+            m_logged_first_frame_blocked_by_error = true;
+        }
+        return false;
+    }
+
+    m_logged_first_frame_blocked_by_error = false;
+
+    if (!m_first_frame_d3d_initialize) {
+        return true;
     }
 
     auto do_not_hook_d3d = acquire_do_not_hook_d3d();
 
-    spdlog::info("Running first frame D3D initialization of mods...");
+    spdlog::info("Running first frame D3D initialization of mods... renderer={} has_frame={} initialized={} mods_ptr={:x}",
+        m_renderer_type == RendererType::D3D12 ? "D3D12" : "D3D11",
+        m_has_frame,
+        m_initialized,
+        (uintptr_t)m_mods.get());
 
     m_first_frame_d3d_initialize = false;
     auto e = m_mods->on_initialize_d3d_thread();
@@ -2201,6 +2254,7 @@ bool REFramework::first_frame_initialize() {
         // Do an initial config save to set the default values for the frontend
         save_config();
         m_mods_fully_initialized = true;
+        spdlog::info("First frame D3D initialization completed successfully");
     }
 
     // Troubleshooting by logging loaded modules

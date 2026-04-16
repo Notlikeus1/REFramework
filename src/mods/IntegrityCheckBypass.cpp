@@ -255,6 +255,15 @@ std::optional<std::string> IntegrityCheckBypass::on_initialize() {
 }
 
 void IntegrityCheckBypass::on_frame() {
+#if defined(PRAGMATA)
+    static bool logged = false;
+    if (!logged) {
+        spdlog::info("[Pragmata] Skipping IntegrityCheckBypass::on_frame runtime patches");
+        logged = true;
+    }
+    return;
+#endif
+
     re9_heartbeat_bypass();
 
 #ifdef RE3
