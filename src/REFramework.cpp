@@ -220,9 +220,13 @@ try {
             spdlog::info("LdrRegisterDllNotification: Loaded: {}", utility::narrow(base_dll_name));
 
             if (lower_base_dll_name.find(L"sl.dlss_g.dll") != std::wstring::npos) {
+#if defined(PRAGMATA)
+                spdlog::info("LdrRegisterDllNotification: Detected DLSS DLL loaded, but skipping Streamline hook on Pragmata");
+#else
                 spdlog::info("LdrRegisterDllNotification: Detected DLSS DLL loaded");
 
                 D3D12Hook::hook_streamline((HMODULE)NotificationData->Loaded.DllBase);
+#endif
             }
         }
 

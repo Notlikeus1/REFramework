@@ -95,6 +95,11 @@ HRESULT WINAPI D3D12Hook::create_swapchain(IDXGIFactory4* factory, IUnknown* dev
 }
 
 void D3D12Hook::hook_streamline(HMODULE dlssg_module) try {
+#if defined(PRAGMATA)
+    spdlog::info("[Streamline] Skipping Streamline hook on Pragmata");
+    return;
+#endif
+
     if (D3D12Hook::s_streamline.setup) {
         return;
     }
@@ -516,7 +521,11 @@ bool D3D12Hook::hook() {
 void D3D12Hook::hook_impl() {
     spdlog::info("Initializing hooks");
 
+#if defined(PRAGMATA)
+    spdlog::info("[Streamline] hook_impl: Streamline hook path disabled on Pragmata");
+#else
     hook_streamline();
+#endif
 
     m_present_hook.reset();
     m_swapchain_hook.reset();
