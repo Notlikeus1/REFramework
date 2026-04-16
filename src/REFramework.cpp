@@ -1034,6 +1034,21 @@ void REFramework::on_frame_d3d12() {
     }
 
 #if defined(PRAGMATA)
+    if ((m_pending_startup_reset || (m_game_data_initialized && m_first_frame_d3d_initialize)) && m_pragmata_d3d12_debug_log_count < 12) {
+        spdlog::info(
+            "[Pragmata] D3D12 frame heartbeat pending_reset={} game_data_initialized={} first_frame_d3d_initialize={} has_frame={} initialized={} cmd_ctxs={} device={:x} swapchain={:x} command_queue={:x}",
+            m_pending_startup_reset,
+            m_game_data_initialized.load(),
+            m_first_frame_d3d_initialize,
+            m_has_frame,
+            m_initialized,
+            m_d3d12.cmd_ctxs.size(),
+            (uintptr_t)device,
+            (uintptr_t)m_d3d12_hook->get_swap_chain(),
+            (uintptr_t)command_queue);
+        ++m_pragmata_d3d12_debug_log_count;
+    }
+
     if (m_pending_startup_reset && m_game_data_initialized) {
         spdlog::info("[Pragmata] Reinitializing D3D12 resources after deferred startup reset");
 
@@ -1224,10 +1239,15 @@ void REFramework::on_reset() {
 
 #if defined(PRAGMATA)
     if (!m_game_data_initialized) {
-        spdlog::info("[Pragmata] Deferring startup reset until game data initialization completes");
-        m_pending_startup_reset = true;
+        ++m_pragmata_startup_reset_count;
+        spdlog::warn(
+            "[Pragmata] Ignoring startup reset #{} before game data initialization completes; preserving startup present flow",
+            m_pragmata_startup_reset_count);
+        m_pending_startup_reset = false;
         m_has_frame = false;
+        m_wants_device_object_cleanup = true;
         m_logged_waiting_for_first_present_after_init = false;
+        m_pragmata_d3d12_debug_log_count = 0;
         return;
     }
 #endif
@@ -2216,10 +2236,15 @@ bool REFramework::initialize_game_data() {
             utility::spoof_module_paths_in_exe_dir();
         }
 #endif
-        spdlog::info("Game data initialization thread finished (error='{}', first_frame_d3d_initialize={}, initialized={})",
+        m_pragmata_d3d12_debug_log_count = 0;
+
+        spdlog::info("Game data initialization thread finished (error='{}', first_frame_d3d_initialize={}, initialized={}, pending_startup_reset={}, has_frame={}, wants_device_cleanup={})",
             m_error,
             m_first_frame_d3d_initialize,
-            m_initialized);
+            m_initialized,
+            m_pending_startup_reset,
+            m_has_frame,
+            m_wants_device_object_cleanup);
     });
 
     init_thread.detach();

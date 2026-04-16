@@ -289,6 +289,8 @@ private:
     bool m_logged_first_frame_blocked_by_error{false};
     bool m_logged_waiting_for_first_present_after_init{false};
     bool m_pending_startup_reset{false};
+    uint32_t m_pragmata_startup_reset_count{0};
+    uint32_t m_pragmata_d3d12_debug_log_count{0};
 
     bool m_sent_message{false};
     bool m_message_hook_requested{false};
